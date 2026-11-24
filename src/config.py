@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from pathlib import Path
 
 
@@ -14,3 +15,21 @@ INCLUDE_20M_BANDS = True
 BANDS_20M = ("B05", "B06", "B07", "B8A", "B11", "B12")
 TARGET_RESOLUTION_M = 10
 SCALE_FACTOR = 10_000
+DELETE_EXTRACTED_BANDS_AFTER_MERGE = True
+
+
+@dataclass(frozen=True)
+class PreprocessingSettings:
+    workspace_dir: Path = WORKSPACE_DIR
+    input_zip_dir: Path = INPUT_ZIP_DIR
+    extract_dir: Path = EXTRACT_DIR
+    output_dir: Path = OUTPUT_DIR
+    bands: tuple[str, ...] = BANDS
+    include_20m_bands: bool = INCLUDE_20M_BANDS
+    bands_20m: tuple[str, ...] = BANDS_20M
+    target_resolution_m: float = TARGET_RESOLUTION_M
+    scale_factor: float = SCALE_FACTOR
+    delete_extracted_bands_after_merge: bool = DELETE_EXTRACTED_BANDS_AFTER_MERGE
+
+
+DEFAULT_SETTINGS = PreprocessingSettings()

@@ -1,16 +1,38 @@
 {
   "name": "preprocess_sentinel2_workflow",
-  "description": "Process all Sentinel-2 ZIP archives in the configured input directory.",
+  "description": "Process all Sentinel-2 ZIP archives using optional per-task settings.",
   "version": 1,
   "schemaVersion": 2,
   "ownerEmail": "preprocessing@localhost",
-  "inputParameters": [],
+  "inputParameters": [
+    "workspace_dir",
+    "input_zip_dir",
+    "extract_dir",
+    "output_dir",
+    "bands",
+    "include_20m_bands",
+    "bands_20m",
+    "target_resolution_m",
+    "scale_factor",
+    "delete_extracted_bands_after_merge"
+  ],
   "tasks": [
     {
       "name": "preprocess_sentinel2",
       "taskReferenceName": "preprocess_sentinel2",
       "type": "SIMPLE",
-      "inputParameters": {}
+      "inputParameters": {
+        "workspace_dir": "${workflow.input.workspace_dir}",
+        "input_zip_dir": "${workflow.input.input_zip_dir}",
+        "extract_dir": "${workflow.input.extract_dir}",
+        "output_dir": "${workflow.input.output_dir}",
+        "bands": "${workflow.input.bands}",
+        "include_20m_bands": "${workflow.input.include_20m_bands}",
+        "bands_20m": "${workflow.input.bands_20m}",
+        "target_resolution_m": "${workflow.input.target_resolution_m}",
+        "scale_factor": "${workflow.input.scale_factor}",
+        "delete_extracted_bands_after_merge": "${workflow.input.delete_extracted_bands_after_merge}"
+      }
     }
   ],
   "outputParameters": {

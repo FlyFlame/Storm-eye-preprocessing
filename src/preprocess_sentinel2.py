@@ -29,15 +29,19 @@ from rasterio.warp import Resampling, reproject
 import config
 
 
-def _configured_bands() -> tuple[str, ...]:
-    bands = config.BANDS
-    if config.INCLUDE_20M_BANDS:
-        bands += config.BANDS_20M
+def _configured_bands(settings: config.PreprocessingSettings) -> tuple[str, ...]:
+    bands = settings.bands
+    if settings.include_20m_bands:
+        bands += settings.bands_20m
     return tuple(dict.fromkeys(bands))
 
 
-def _extract_archive(archive_path: Path, extraction_path: Path) -> Path:
-    bands_to_process = _configured_bands()
+def _extract_archive(
+    archive_path: Path,
+    extraction_path: Path,
+    settings: config.PreprocessingSettings,
+) -> Path:
+    bands_to_process = _configured_bands(settings)
     requested_bands = {
         band: re.compile(rf"_{re.escape(band)}_(\d+)m\.jp2$", re.IGNORECASE)
         for band in bands_to_process
@@ -97,8 +101,8 @@ def _extract_archive(archive_path: Path, extraction_path: Path) -> Path:
             for band, candidates in bands.items():
                 preferred_resolution = (
                     20
-                    if config.INCLUDE_20M_BANDS and band in config.BANDS_20M
-                    else config.TARGET_RESOLUTION_M
+                    if settings.include_20m_bands and band in settings.bands_20m
+                    else settings.target_resolution_m
                 )
                 resolution, member = min(
                     candidates,
@@ -131,7 +135,11 @@ def _find_img_data_dirs(root: Path) -> list[Path]:
     )
 
 
-def _find_band_file(img_data_dir: Path, band: str) -> Path:
+def _find_band_file(
+    img_data_dir: Path,
+    band: str,
+    target_resolution_m: float,
+) -> Path:
     pattern = re.compile(rf"_{re.escape(band)}_(\d+)m\.jp2$", re.IGNORECASE)
     candidates: list[tuple[int, Path]] = []
     for path in img_data_dir.rglob("*.jp2"):
@@ -144,22 +152,30 @@ def _find_band_file(img_data_dir: Path, band: str) -> Path:
 
     candidates.sort(
         key=lambda candidate: (
-            abs(candidate[0] - config.TARGET_RESOLUTION_M),
+            abs(candidate[0] - target_resolution_m),
             -candidate[0],
         )
     )
     return candidates[0][1]
 
 
-def _create_multiband_raster(img_data_dir: Path, output_path: Path) -> Path:
-    bands_to_process = _configured_bands()
+def _create_multiband_raster(
+    img_data_dir: Path,
+    output_path: Path,
+    settings: config.PreprocessingSettings,
+) -> Path:
+    bands_to_process = _configured_bands(settings)
     if not bands_to_process:
         raise ValueError("Set at least one band in preprocessing/config.py.")
-    if config.TARGET_RESOLUTION_M <= 0 or config.SCALE_FACTOR <= 0:
+    if settings.target_resolution_m <= 0 or settings.scale_factor <= 0:
         raise ValueError("Target resolution and scale factor must be greater than zero.")
 
     band_files = [
-        (band, _find_band_file(img_data_dir, band)) for band in bands_to_process
+        (
+            band,
+            _find_band_file(img_data_dir, band, settings.target_resolution_m),
+        )
+        for band in bands_to_process
     ]
     with rasterio.open(band_files[0][1]) as reference:
         target_crs = reference.crs
@@ -172,7 +188,7 @@ def _create_multiband_raster(img_data_dir: Path, output_path: Path) -> Path:
             )
 
         bounds = reference.bounds
-        resolution = config.TARGET_RESOLUTION_M
+        resolution = settings.target_resolution_m
         width = math.ceil((bounds.right - bounds.left) / resolution - 1e-9)
         height = math.ceil((bounds.top - bounds.bottom) / resolution - 1e-9)
         if width <= 0 or height <= 0:
@@ -215,12 +231,12 @@ def _create_multiband_raster(img_data_dir: Path, output_path: Path) -> Path:
                         resampling=Resampling.bilinear,
                         init_dest_nodata=True,
                     )
-                    data /= config.SCALE_FACTOR
+                    data /= settings.scale_factor
                     destination.write(data, index)
                     destination.set_band_description(index, band)
                     del data
             destination.update_tags(
-                scale_factor=config.SCALE_FACTOR,
+                scale_factor=settings.scale_factor,
                 source="Sentinel-2 L2A",
             )
         temporary_path.replace(output_path)
@@ -231,42 +247,75 @@ def _create_multiband_raster(img_data_dir: Path, output_path: Path) -> Path:
     return output_path
 
 
-def process_archive(archive_path: Path) -> list[Path]:
+def _process_extracted_archive(
+    archive_path: Path,
+    extraction_path: Path,
+    settings: config.PreprocessingSettings,
+) -> list[Path]:
+    extraction_path = _extract_archive(archive_path, extraction_path, settings)
+    img_data_dirs = _find_img_data_dirs(extraction_path)
+    outputs = []
+    for img_data_dir in img_data_dirs:
+        granule_name = img_data_dir.parent.name
+        output_name = f"{archive_path.stem}_{granule_name}.tif"
+        outputs.append(
+            _create_multiband_raster(
+                img_data_dir,
+                settings.output_dir / output_name,
+                settings,
+            )
+        )
+    return outputs
+
+
+def process_archive(
+    archive_path: Path,
+    settings: config.PreprocessingSettings | None = None,
+) -> list[Path]:
+    settings = settings or config.DEFAULT_SETTINGS
     archive_path = archive_path.expanduser().resolve()
     if not archive_path.is_file():
         raise FileNotFoundError(f"ZIP archive not found: {archive_path}")
     if archive_path.suffix.lower() != ".zip":
         raise ValueError(f"Expected a ZIP archive: {archive_path}")
 
-    config.EXTRACT_DIR.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(
-        prefix=f"{archive_path.stem}_",
-        dir=config.EXTRACT_DIR,
-    ) as temporary_dir:
-        extraction_path = _extract_archive(archive_path, Path(temporary_dir))
-        img_data_dirs = _find_img_data_dirs(extraction_path)
-        outputs = []
-        for img_data_dir in img_data_dirs:
-            granule_name = img_data_dir.parent.name
-            output_name = f"{archive_path.stem}_{granule_name}.tif"
-            outputs.append(
-                _create_multiband_raster(img_data_dir, config.OUTPUT_DIR / output_name)
+    settings.extract_dir.mkdir(parents=True, exist_ok=True)
+    if settings.delete_extracted_bands_after_merge:
+        with tempfile.TemporaryDirectory(
+            prefix=f"{archive_path.stem}_",
+            dir=settings.extract_dir,
+        ) as temporary_dir:
+            return _process_extracted_archive(
+                archive_path,
+                Path(temporary_dir),
+                settings,
             )
-        return outputs
+
+    extraction_path = Path(
+        tempfile.mkdtemp(
+            prefix=f"{archive_path.stem}_",
+            dir=settings.extract_dir,
+        )
+    )
+    return _process_extracted_archive(archive_path, extraction_path, settings)
 
 
-def process_archives(archive_paths: list[Path] | None = None) -> list[Path]:
+def process_archives(
+    archive_paths: list[Path] | None = None,
+    settings: config.PreprocessingSettings | None = None,
+) -> list[Path]:
+    settings = settings or config.DEFAULT_SETTINGS
     archives = (
         archive_paths
         if archive_paths is not None
-        else sorted(config.INPUT_ZIP_DIR.glob("*.zip"))
+        else sorted(settings.input_zip_dir.glob("*.zip"))
     )
     if not archives:
-        raise FileNotFoundError(f"No ZIP archives found in {config.INPUT_ZIP_DIR}")
+        raise FileNotFoundError(f"No ZIP archives found in {settings.input_zip_dir}")
 
     outputs = []
     for archive_path in archives:
-        outputs.extend(process_archive(archive_path))
+        outputs.extend(process_archive(archive_path, settings))
     return outputs
 
 

@@ -1,7 +1,18 @@
 {
   "name": "preprocess_sentinel2",
-  "description": "Run Sentinel-2 preprocessing for all ZIP archives in the configured input directory.",
-  "inputKeys": [],
+  "description": "Run Sentinel-2 preprocessing for all ZIP archives, with optional per-task processing settings.",
+  "inputKeys": [
+    "workspace_dir",
+    "input_zip_dir",
+    "extract_dir",
+    "output_dir",
+    "bands",
+    "include_20m_bands",
+    "bands_20m",
+    "target_resolution_m",
+    "scale_factor",
+    "delete_extracted_bands_after_merge"
+  ],
   "retryCount": 2,
   "retryLogic": "FIXED",
   "retryDelaySeconds": 30,
