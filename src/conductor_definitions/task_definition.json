@@ -1,0 +1,12 @@
+{
+  "name": "preprocess_sentinel2",
+  "description": "Run Sentinel-2 preprocessing for all ZIP archives in the configured input directory.",
+  "inputKeys": [],
+  "retryCount": 2,
+  "retryLogic": "FIXED",
+  "retryDelaySeconds": 30,
+  "timeoutSeconds": 86400,
+  "responseTimeoutSeconds": 86400,
+  "timeoutPolicy": "TIME_OUT_WF",
+  "ownerEmail": "preprocessing@localhost"
+}

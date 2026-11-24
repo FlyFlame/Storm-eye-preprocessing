@@ -1,0 +1,27 @@
+services:
+  preprocess_sentinel2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ../eodag/downloads:/app/eodag/downloads:ro
+      - ./extracted:/app/src/extracted
+      - ./output:/app/src/output
+    restart: "no"
+
+  conductor_worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    profiles:
+      - conductor
+    command: ["python", "conductor_worker.py"]
+    restart: unless-stopped
+    environment:
+      CONDUCTOR_SERVER_URL: ${CONDUCTOR_SERVER_URL:-http://host.docker.internal:8080/api}
+      CONDUCTOR_TASK_TYPE: ${CONDUCTOR_TASK_TYPE:-preprocess_sentinel2}
+      CONDUCTOR_POLL_TIMEOUT_SECONDS: ${CONDUCTOR_POLL_TIMEOUT_SECONDS:-30}
+    volumes:
+      - ../eodag/downloads:/app/eodag/downloads:ro
+      - ./extracted:/app/src/extracted
+      - ./output:/app/src/output

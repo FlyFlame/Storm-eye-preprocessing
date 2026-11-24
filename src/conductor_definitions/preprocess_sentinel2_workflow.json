@@ -1,0 +1,20 @@
+{
+  "name": "preprocess_sentinel2_workflow",
+  "description": "Process all Sentinel-2 ZIP archives in the configured input directory.",
+  "version": 1,
+  "schemaVersion": 2,
+  "ownerEmail": "preprocessing@localhost",
+  "inputParameters": [],
+  "tasks": [
+    {
+      "name": "preprocess_sentinel2",
+      "taskReferenceName": "preprocess_sentinel2",
+      "type": "SIMPLE",
+      "inputParameters": {}
+    }
+  ],
+  "outputParameters": {
+    "output_count": "${preprocess_sentinel2.output.output_count}",
+    "output_files": "${preprocess_sentinel2.output.output_files}"
+  }
+}
